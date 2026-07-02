@@ -206,14 +206,15 @@
     function renderGallery() {
       const gallery = document.getElementById('gallery');
       const empty   = document.getElementById('gallery-empty');
-      gallery.innerHTML = '';
+      gallery.querySelectorAll('.gallery-card').forEach(el => el.remove());
       if (images.length === 0) {
-        gallery.appendChild(empty);
+        empty.classList.remove('hidden');
         return;
       }
+      empty.classList.add('hidden');
       images.forEach(img => {
         const card = document.createElement('div');
-        card.className = 'rounded-xl overflow-hidden bg-gray-800 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all duration-200';
+        card.className = 'gallery-card rounded-xl overflow-hidden bg-gray-800 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all duration-200';
         card.innerHTML = `
           <img src="${img.url}" class="w-full h-40 object-cover" alt="${escHtml(img.name)}"
                loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23374151%22 width=%22100%22 height=%22100%22/><text x=%2250%%22 y=%2250%%22 text-anchor=%22middle%22 fill=%22%236b7280%22 dy=%22.3em%22>!</text></svg>'">
