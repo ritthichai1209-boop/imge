@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Viewer System</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <style>
+    body { font-family: 'DM Sans', sans-serif; background-color: #111827; color: #f3f4f6; }
+
+    .fullscreen-modal {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    .fullscreen-modal.hidden { display: none; }
+    .fullscreen-image {
+      max-width: 95vw;
+      max-height: 95vh;
+      object-fit: contain;
+      animation: scaleIn 0.3s ease-in-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes scaleIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to   { transform: scale(1);    opacity: 1; }
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 10000;
+      animation: slideUp 0.3s ease;
+      transition: opacity 0.3s ease;
+    }
+    .toast-success { background: #0d9488; color: #fff; }
+    .toast-error   { background: #dc2626; color: #fff; }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    .upload-progress {
+      display: none;
+      height: 4px;
+      background: #374151;
+      border-radius: 9999px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .upload-progress.show { display: block; }
+    .upload-progress-bar {
+      height: 100%;
+      background: #0d9488;
+      border-radius: 9999px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 48px 24px;
+      color: #6b7280;
+    }
+    .empty-state i { margin-bottom: 12px; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Header -->
+  <header class="p-6 border-b border-gray-700">
+    <h1 id="header-title"
+        class="text-2xl text-center font-bold cursor-pointer select-none text-teal-400 tracking-wide">
+      Image Viewer System
+    </h1>
+    <p class="text-center text-xs text-gray-500 mt-1">คลิกชื่อระบบ 3 ครั้งเพื่อเปิด Admin Panel</p>
+  </header>
+
+  <main class="max-w-4xl mx-auto p-6">
+
+    <!-- Upload Form -->
+    <form id="upload-form" class="flex flex-col sm:flex-row gap-3 items-end mb-8">
+      <div class="flex-1 w-full">
+        <label class="block mb-1 text-sm font-medium text-gray-300" for="img-name">ชื่อรูปภาพ</label>
+        <input id="img-name" type="text" placeholder="ระบุชื่อรูปภาพ (ไม่บังคับ)"
+               class="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500">
+      </div>
+      <div class="flex-1 w-full">
+        <label class="block mb-1 text-sm font-medium text-gray-300" for="img-file">เลือกไฟล์รูปภาพ</label>
+        <input id="img-file" type="file" accept="image/*"
+               class="w-full text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-teal-600 file:text-white file:cursor-pointer hover:file:bg-teal-700">
+        <div id="upload-progress" class="upload-progress">
+          <div id="upload-progress-bar" class="upload-progress-bar"></div>
+        </div>
+      </div>
+      <button type="submit" id="upload-btn"
+              class="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2 rounded-lg font-medium whitespace-nowrap transition flex items-center gap-2 disabled:opacity-50">
+        <i data-lucide="upload" style="width:16px;height:16px;"></i>
+        อัปโหลด
+      </button>
+    </form>
+
+    <!-- Main Gallery -->
+    <section id="gallery" class="grid grid-cols-2 sm:grid-cols-3 gap-4 min-h-[160px]">
+      <div class="empty-state col-span-full flex flex-col items-center justify-center" id="gallery-empty">
+        <i data-lucide="image" style="width:48px;height:48px;color:#4b5563;"></i>
+        <p class="mt-3 text-gray-500">ยังไม่มีรูปภาพ — อัปโหลดรูปแรกเลย!</p>
+      </div>
+    </section>
+
+    <!-- Admin Panel -->
+    <section id="admin-panel" class="hidden mt-10 border-t border-gray-700 pt-6">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <h2 class="text-lg font-bold text-teal-400 flex items-center gap-2">
+          <i data-lucide="shield" style="width:20px;height:20px;"></i>
+          Admin Panel
+        </h2>
+        <div class="flex items-center gap-2">
+          <span id="image-count" class="text-sm text-gray-400"></span>
+          <button id="random-btn" type="button"
+                  class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition">
+            <i data-lucide="shuffle" style="width:16px;height:16px;"></i>
+            สุ่มรูปภาพ
+          </button>
+        </div>
+      </div>
+      <div id="admin-gallery" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+      <p id="admin-empty" class="hidden text-center py-8 text-gray-500">ยังไม่มีรูปภาพในระบบ</p>
+    </section>
+
+  </main>
+
+  <!-- Fullscreen Modal -->
+  <div id="fullscreen-modal" class="fullscreen-modal hidden">
+    <img id="fullscreen-image" class="fullscreen-image" alt="Fullscreen">
+    <button id="close-fullscreen"
+            class="absolute top-4 right-4 text-white hover:text-gray-300 transition bg-black/40 rounded-full p-2"
+            aria-label="Close">
+      <i data-lucide="x" style="width:28px;height:28px;"></i>
+    </button>
+    <p id="fullscreen-name" class="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/50 px-4 py-2 rounded-full max-w-xs text-center truncate"></p>
+  </div>
+
+  <script>
+    // ─── State ───────────────────────────────────────────────────────────────
+    let images = [];
+    let clickCount = 0;
+    let clickTimer = null;
+    let pollTimer = null;
+
+    // ─── Audio ───────────────────────────────────────────────────────────────
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playRandomSound() {
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = Math.random() * 400 + 200;
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+      osc.start(now);
+      osc.stop(now + 0.2);
+    }
+
+    // ─── Toast ────────────────────────────────────────────────────────────────
+    function showToast(msg, type = 'success') {
+      const t = document.createElement('div');
+      t.className = `toast toast-${type}`;
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => {
+        t.style.opacity = '0';
+        setTimeout(() => t.remove(), 300);
+      }, 2800);
+    }
+
+    // ─── Fullscreen ───────────────────────────────────────────────────────────
+    function openFullscreen(src, name) {
+      document.getElementById('fullscreen-image').src = src;
+      document.getElementById('fullscreen-name').textContent = name || '';
+      document.getElementById('fullscreen-modal').classList.remove('hidden');
+    }
+
+    document.getElementById('close-fullscreen').addEventListener('click', () => {
+      document.getElementById('fullscreen-modal').classList.add('hidden');
+    });
+    document.getElementById('fullscreen-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'fullscreen-modal') {
+        document.getElementById('fullscreen-modal').classList.add('hidden');
+      }
+    });
+
+    // ─── Render Gallery ───────────────────────────────────────────────────────
+    function renderGallery() {
+      const gallery = document.getElementById('gallery');
+      const empty   = document.getElementById('gallery-empty');
+      gallery.innerHTML = '';
+      if (images.length === 0) {
+        gallery.appendChild(empty);
+        return;
+      }
+      images.forEach(img => {
+        const card = document.createElement('div');
+        card.className = 'rounded-xl overflow-hidden bg-gray-800 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all duration-200';
+        card.innerHTML = `
+          <img src="${img.url}" class="w-full h-40 object-cover" alt="${escHtml(img.name)}"
+               loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23374151%22 width=%22100%22 height=%22100%22/><text x=%2250%%22 y=%2250%%22 text-anchor=%22middle%22 fill=%22%236b7280%22 dy=%22.3em%22>!</text></svg>'">
+          <p class="p-2 text-sm text-gray-200 truncate">${escHtml(img.name)}</p>`;
+        card.addEventListener('click', () => openFullscreen(img.url, img.name));
+        gallery.appendChild(card);
+      });
+    }
+
+    // ─── Render Admin ─────────────────────────────────────────────────────────
+    function renderAdmin() {
+      const admin = document.getElementById('admin-gallery');
+      const empty = document.getElementById('admin-empty');
+      const count = document.getElementById('image-count');
+      admin.innerHTML = '';
+      count.textContent = `${images.length} รูป`;
+
+      if (images.length === 0) {
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+
+      images.forEach(img => {
+        const el = document.createElement('div');
+        el.className = 'rounded-lg overflow-hidden bg-gray-900 border border-gray-700 relative group';
+        el.innerHTML = `
+          <img src="${img.url}" class="w-full h-28 object-cover cursor-pointer" alt="${escHtml(img.name)}"
+               loading="lazy">
+          <p class="p-1.5 text-xs text-gray-300 truncate pr-8">${escHtml(img.name)}</p>
+          <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition flex items-start justify-end p-1.5 bg-black/20 pointer-events-none">
+            <button class="delete-btn pointer-events-auto bg-red-600 hover:bg-red-700 text-white rounded-full p-1 transition"
+                    data-id="${img.id}" title="ลบรูปภาพ">
+              <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+            </button>
+          </div>`;
+        el.querySelector('img').addEventListener('click', () => openFullscreen(img.url, img.name));
+        el.querySelector('.delete-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          confirmDelete(img.id, img.name);
+        });
+        admin.appendChild(el);
+      });
+      lucide.createIcons();
+    }
+
+    // ─── Confirm & Delete ─────────────────────────────────────────────────────
+    function confirmDelete(id, name) {
+      if (!confirm(`ลบรูปภาพ "${name}" ออกจากระบบ?\nรูปภาพจะถูกลบออกจากฐานข้อมูลถาวร`)) return;
+      fetch(`/api/images/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            images = images.filter(img => img.id !== id);
+            renderGallery();
+            renderAdmin();
+            showToast('ลบรูปภาพเรียบร้อยแล้ว');
+          } else {
+            showToast('เกิดข้อผิดพลาดในการลบ', 'error');
+          }
+        })
+        .catch(() => showToast('ไม่สามารถเชื่อมต่อ Server ได้', 'error'));
+    }
+
+    // ─── Load Images from API ─────────────────────────────────────────────────
+    function loadImages(silent = false) {
+      fetch('/api/images')
+        .then(r => r.json())
+        .then(data => {
+          const prevCount = images.length;
+          images = data;
+          renderGallery();
+          renderAdmin();
+          lucide.createIcons();
+          if (!silent && data.length > prevCount && prevCount > 0) {
+            showToast(`มีรูปภาพใหม่ ${data.length - prevCount} รูป`);
+          }
+        })
+        .catch(() => { if (!silent) showToast('ไม่สามารถโหลดรูปภาพจาก Server ได้', 'error'); });
+    }
+
+    function startPolling() {
+      stopPolling();
+      pollTimer = setInterval(() => loadImages(true), 10000);
+    }
+
+    function stopPolling() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    // ─── Upload ───────────────────────────────────────────────────────────────
+    document.getElementById('upload-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fileInput = document.getElementById('img-file');
+      const nameInput = document.getElementById('img-name');
+      const btn       = document.getElementById('upload-btn');
+      const progress  = document.getElementById('upload-progress');
+      const bar       = document.getElementById('upload-progress-bar');
+      const file = fileInput.files[0];
+      if (!file) { showToast('กรุณาเลือกไฟล์รูปภาพก่อน', 'error'); return; }
+
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('name', nameInput.value.trim() || file.name);
+
+      btn.disabled = true;
+      progress.classList.add('show');
+
+      const xhr = new XMLHttpRequest();
+      xhr.upload.addEventListener('progress', (ev) => {
+        if (ev.lengthComputable) {
+          bar.style.width = Math.round((ev.loaded / ev.total) * 100) + '%';
+        }
+      });
+      xhr.addEventListener('load', () => {
+        btn.disabled = false;
+        progress.classList.remove('show');
+        bar.style.width = '0%';
+        let data;
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch (_) {
+          showToast('เซิร์ฟเวอร์ตอบกลับข้อมูลไม่ถูกต้อง', 'error');
+          return;
+        }
+        if (xhr.status === 200) {
+          fileInput.value = '';
+          nameInput.value = '';
+          showToast('อัปโหลดรูปภาพสำเร็จ!');
+          loadImages(true);
+        } else {
+          showToast(data.error || 'อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', 'error');
+        }
+      });
+      xhr.addEventListener('error', () => {
+        btn.disabled = false;
+        progress.classList.remove('show');
+        showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+      });
+      xhr.open('POST', '/api/images');
+      xhr.send(formData);
+    });
+
+    // ─── Header Triple-Click → Admin ──────────────────────────────────────────
+    document.getElementById('header-title').addEventListener('click', () => {
+      clickCount++;
+      if (clickCount === 3) {
+        clickCount = 0;
+        clearTimeout(clickTimer);
+        document.getElementById('admin-panel').classList.toggle('hidden');
+      } else {
+        clearTimeout(clickTimer);
+        clickTimer = setTimeout(() => { clickCount = 0; }, 600);
+      }
+    });
+
+    // ─── Random Button ────────────────────────────────────────────────────────
+    document.getElementById('random-btn').addEventListener('click', () => {
+      if (images.length === 0) { showToast('ยังไม่มีรูปภาพในระบบ', 'error'); return; }
+      playRandomSound();
+      const rnd = images[Math.floor(Math.random() * images.length)];
+      setTimeout(() => openFullscreen(rnd.url, rnd.name), 200);
+    });
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ─── Init ─────────────────────────────────────────────────────────────────
+    lucide.createIcons();
+    loadImages();
+    startPolling();
+  </script>
+</body>
+</html>
