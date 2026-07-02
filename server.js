@@ -7,7 +7,7 @@ const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const dataDir = process.env.DATA_DIR || __dirname;
+const dataDir = process.env.DATA_DIR || (process.env.VERCEL ? '/tmp' : __dirname);
 
 const uploadsDir = path.join(dataDir, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -99,6 +99,10 @@ app.delete('/api/images/:id', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Image Viewer System running at http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Image Viewer System running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
