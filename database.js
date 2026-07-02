@@ -1,8 +1,10 @@
 const Datastore = require('@seald-io/nedb');
 const path = require('path');
 
+const dataDir = process.env.DATA_DIR || __dirname;
+
 const db = new Datastore({
-  filename: path.join(__dirname, 'images.db'),
+  filename: path.join(dataDir, 'images.db'),
   autoload: true
 });
 
