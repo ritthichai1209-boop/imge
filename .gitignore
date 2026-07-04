@@ -6,3 +6,6 @@ photo-gallery/
 *.log
 .env
 .env.local
+
+.vercel
+.env*

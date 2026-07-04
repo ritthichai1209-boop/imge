@@ -9,6 +9,50 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const dataDir = process.env.DATA_DIR || (process.env.VERCEL ? '/tmp' : __dirname);
 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+if (!process.env.ADMIN_PASSWORD) {
+  console.warn('ADMIN_PASSWORD not set — using insecure default "admin123". Set it in production.');
+}
+
+function signSession(expiresAt) {
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(String(expiresAt)).digest('hex');
+  return `${expiresAt}.${sig}`;
+}
+
+function verifySession(token) {
+  if (!token) return false;
+  const [expiresAt, sig] = token.split('.');
+  if (!expiresAt || !sig) return false;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(expiresAt).digest('hex');
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expected);
+  if (sigBuf.length !== expectedBuf.length) return false;
+  if (!crypto.timingSafeEqual(sigBuf, expectedBuf)) return false;
+  return Number(expiresAt) > Date.now();
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie;
+  const cookies = {};
+  if (!header) return cookies;
+  header.split(';').forEach((pair) => {
+    const idx = pair.indexOf('=');
+    if (idx === -1) return;
+    cookies[pair.slice(0, idx).trim()] = decodeURIComponent(pair.slice(idx + 1).trim());
+  });
+  return cookies;
+}
+
+function requireAdmin(req, res, next) {
+  const cookies = parseCookies(req);
+  if (!verifySession(cookies.admin_session)) {
+    return res.status(401).json({ error: 'กรุณาเข้าสู่ระบบแอดมิน' });
+  }
+  next();
+}
+
 const uploadsDir = path.join(dataDir, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -37,6 +81,32 @@ const upload = multer({
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadsDir));
 app.use(express.json());
+
+// ─── Admin Auth ─────────────────────────────────────────────────────────────
+app.post('/api/admin/login', (req, res) => {
+  const { password } = req.body || {};
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'รหัสผ่านไม่ถูกต้อง' });
+  }
+  const expiresAt = Date.now() + SESSION_MAX_AGE_MS;
+  res.cookie('admin_session', signSession(expiresAt), {
+    httpOnly: true,
+    secure: !!process.env.VERCEL,
+    sameSite: 'lax',
+    maxAge: SESSION_MAX_AGE_MS,
+    path: '/'
+  });
+  res.json({ success: true });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  res.clearCookie('admin_session', { path: '/' });
+  res.json({ success: true });
+});
+
+app.get('/api/admin/session', (req, res) => {
+  res.json({ authenticated: verifySession(parseCookies(req).admin_session) });
+});
 
 // GET all images (sorted newest first)
 app.get('/api/images', (req, res) => {
@@ -83,8 +153,23 @@ app.post('/api/images', (req, res) => {
   });
 });
 
+// DELETE all images
+app.delete('/api/images', requireAdmin, (req, res) => {
+  db.find({}, (err, docs) => {
+    if (err) return res.status(500).json({ error: 'ไม่สามารถโหลดข้อมูลได้' });
+    db.remove({}, { multi: true }, (removeErr) => {
+      if (removeErr) return res.status(500).json({ error: 'ลบข้อมูลไม่สำเร็จ' });
+      docs.forEach((doc) => {
+        const filePath = path.join(uploadsDir, doc.filename);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      });
+      res.json({ success: true, count: docs.length });
+    });
+  });
+});
+
 // DELETE image by id
-app.delete('/api/images/:id', (req, res) => {
+app.delete('/api/images/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
   db.findOne({ _id: id }, (err, doc) => {
     if (err || !doc) {
