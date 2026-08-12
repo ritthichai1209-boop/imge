@@ -9,11 +9,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const dataDir = process.env.DATA_DIR || (process.env.VERCEL ? '/tmp' : __dirname);
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Silavd0012';
 const SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 if (!process.env.ADMIN_PASSWORD) {
-  console.warn('ADMIN_PASSWORD not set — using insecure default "admin123". Set it in production.');
+  console.warn('ADMIN_PASSWORD not set — using insecure default "Silavd0012". Set it in production.');
 }
 
 function signSession(expiresAt) {
